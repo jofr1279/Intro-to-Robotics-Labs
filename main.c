@@ -86,7 +86,7 @@ void setGripper(char state) {
     else sparki.gripperClose();
 
     // Give the gripper time to move.
-    delay(5000);
+    delay(7000);
 
     sparki.gripperStop();
 }
@@ -187,10 +187,10 @@ void loop() {
             correctionTurns = 1;
             correctionTurnProgress = 0;
 
-            // Drive until the object is less than 7 cm away, move a little
+            // Drive until the object is less than 8 cm away, move a little
             // further to make sure the object is in the grippers, and then
             // start picking up the object.
-            if (objectInDistance(7)) {
+            if (objectInDistance(8)) {
                 sparki.moveForward();
                 delay(1000);
                 current_state = STATE_PICK_UP_OBJECT;
@@ -203,6 +203,10 @@ void loop() {
 
             // Close the gripper around the object.
             setGripper(GRIPPER_CLOSE);
+
+            // Back up a bit before turning.
+            sparki.moveBackward();
+            delay(1000);
 
             // Start spinning around.
             current_state = STATE_SPIN_180;
