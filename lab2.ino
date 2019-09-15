@@ -1,6 +1,6 @@
 #include <Sparki.h>
 
-#define USE_CLOSURE 1
+#define USE_CLOSURE 0
 
 #define STATE_CALIBRATE 0
 #define STATE_FOLLOW_LINE 1
@@ -19,7 +19,7 @@
 #define LINE_FULL 4
 
 #define THRESHOLD 700
-#define LAP_COOLDOWN_MAX 100
+#define LAP_COOLDOWN_MAX 5
 
 const char* STATE_STRING[] = {
     "Calibrate",
@@ -45,7 +45,7 @@ struct pose recorded_poses[3];
 double speed;
 double angular_speed;
 int current_lap = -1;
-int lapCooldown = LAP_COOLDOWN_MAX;
+int lapCooldown = 0;
 
 void readSensors() {
     line_left = sparki.lineLeft();
@@ -140,7 +140,8 @@ void displayOdometry() {
     sparki.println(current_pose.angle);
 
     sparki.print("Lap: ");
-    sparki.println(current_lap);
+    sparki.print(current_lap + 1);
+    sparki.println("/3");
 }
 
 // Helper function that sets the current direction and also sets the robot's
@@ -167,9 +168,7 @@ void setDirection(char direction) {
     current_direction = direction;
 }
 
-void setup() {
-    sparki.clearLCD();
-}
+void setup() {}
 
 void loop() {
     unsigned long loopStartTime = millis();
@@ -178,15 +177,21 @@ void loop() {
 
     switch (current_state) {
         case STATE_CALIBRATE:
+            sparki.println("Calibrating...");
+            sparki.updateLCD();
+
+            // Calibrate sparki (set the speeds).
             speed = measureSpeed();
             angular_speed = measureRotationalSpeed();
 
-            // The configuration is complete.
+            // The calibration is complete.
             // Instruct the user to place Sparki before the start line.
-            sparki.println("Configuration complete.");
+            sparki.clearLCD();
+            sparki.println("Calibration complete.");
             sparki.println("");
             sparki.println("Place before");
             sparki.println("start line.");
+            sparki.updateLCD();
             delay(5000);
 
             current_state = STATE_FOLLOW_LINE;
@@ -194,10 +199,14 @@ void loop() {
         case STATE_FOLLOW_LINE:
             if (lapCooldown) {
                 lapCooldown--;
+
+                // Sometimes sparki will turn randomly when near the
+                // line, so don't let him during lap cooldown.
+                setDirection(DIRECTION_FORWARD);
             }
 
             // Follow the line.
-            switch (getLineStatus()) {
+            else switch (getLineStatus()) {
                 case LINE_LEFT:
                     // We are either drifting towards the left, or a right turn
                     // has come up. Either way, turn right.
@@ -217,17 +226,17 @@ void loop() {
                 case LINE_FULL:
                     // Only increment the lap counter if the cooldown is up.
                     if (!lapCooldown) {
-                        current_lap++;
-
-                        // If all three laps have been taken, stop.
-                        if (current_lap == 3) current_state = STATE_DONE;
-
                         // Record the current pose.
-                        if (current_lap) {
+                        if (current_lap >= 0) {
                             recorded_poses[current_lap].x = current_pose.x;
                             recorded_poses[current_lap].y = current_pose.y;
                             recorded_poses[current_lap].angle = current_pose.angle;
                         }
+
+                        current_lap++;
+
+                        // If all three laps have been taken, stop.
+                        if (current_lap == 3) current_state = STATE_DONE;
 
                         // Reset the current pose.
                         if (USE_CLOSURE || !current_lap) {
@@ -243,8 +252,11 @@ void loop() {
 
                     break;
             }
+            
             break;
         case STATE_DONE:
+            sparki.moveStop();
+        
             sparki.println("Results:");
             for (char i = 0; i < 3; ++i) {
                 sparki.print(i + 1);
