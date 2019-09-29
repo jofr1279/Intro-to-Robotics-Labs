@@ -13,7 +13,6 @@
 
 #define THETA_MODE_BEARING 0
 #define THETA_MODE_HEADING 1
-
 const char* STATE_STRING[] = {
     "STOP",
     "FOLLOW LINE",
@@ -34,8 +33,11 @@ double phi_l = 0, phi_r = 0;
 double left_speed_pct = 0;
 double right_speed_pct = 0;
 
-int left_dir = DIR_CW;
-int right_dir = DIR_CCW;
+int left_dir = DIR_CCW;
+int right_dir = DIR_CW;
+
+bool flip_left = false;
+bool flip_right = false;
 
 double dX = 0, dTheta = 0;
 
@@ -59,50 +61,47 @@ void set_pose_destination(double x, double y, double t) {
     dest_pose_x = x;
     dest_pose_y = y;
     dest_pose_theta = t;
-    if (dest_pose_theta > M_PI) dest_pose_theta -= 2 * M_PI;
+    if (dest_pose_theta > M_PI)  dest_pose_theta -= 2 * M_PI;
     if (dest_pose_theta < -M_PI) dest_pose_theta += 2 * M_PI;
-}
-
-void readSensors() {
-    line_left = sparki.lineLeft();
-    line_right = sparki.lineRight();
-    line_center = sparki.lineCenter();
 }
 
 void updateOdometry(char theta_mode) {
     d_err = sqrt(
-        pow((pose_x - dest_pose_x), 2) +
-        pow((pose_y - dest_pose_y), 2)
+        pow(pose_x - dest_pose_x, 2) +
+        pow(pose_y - dest_pose_y, 2)
     );
     b_err = atan2(dest_pose_y - pose_y, dest_pose_x - pose_x) - pose_theta;
     h_err = dest_pose_theta - pose_theta;
 
     const double theta_err = (theta_mode == THETA_MODE_BEARING) ? b_err : h_err;
 
-    phi_l = (d_err - ((theta_err * AXLE_DIAMETER) / 2)) / WHEEL_RADIUS;
-    phi_r = (d_err + ((theta_err * AXLE_DIAMETER) / 2)) / WHEEL_RADIUS;
+    phi_l = (d_err + ((theta_err * AXLE_DIAMETER) / 2)) / WHEEL_RADIUS;
+    phi_r = (d_err - ((theta_err * AXLE_DIAMETER) / 2)) / WHEEL_RADIUS;
 
     if (phi_l > phi_r) {
         left_speed_pct  = 1;
-        right_speed_pct = max(phi_r / phi_l, 0);
+        right_speed_pct = phi_r / phi_l;
     } else {
-        left_speed_pct  = max(phi_l / phi_r, 0);
+        left_speed_pct  = phi_l / phi_r;
         right_speed_pct = 1;
     }
 
     const double left_change  = left_speed_pct  * ROBOT_SPEED * CYCLE_TIME;
     const double right_change = right_speed_pct * ROBOT_SPEED * CYCLE_TIME;
 
-    pose_theta += (right_change - left_change) / AXLE_DIAMETER;
+    pose_theta += (left_change - right_change) / AXLE_DIAMETER;
 
-    const double pose_vector = ((right_change + left_change) / 2);
+    const double pose_vector = (right_change + left_change) / 2;
 
     pose_x += cos(pose_theta) * pose_vector;
     pose_y += sin(pose_theta) * pose_vector;
 
     // Bound theta.
-    if (pose_theta > M_PI) pose_theta -= 2 * M_PI;
+    if (pose_theta >   M_PI) pose_theta -= 2 * M_PI;
     if (pose_theta <= -M_PI) pose_theta += 2 * M_PI;
+
+    flip_left = phi_l < 0;
+    flip_right = phi_r < 0;
 }
 
 void displayOdometry() {
@@ -120,7 +119,6 @@ void displayOdometry() {
     sparki.print(to_degrees(pose_theta));
     sparki.print(" Tg: ");
     sparki.println(to_degrees(dest_pose_theta));
-
     sparki.print("dX : ");
     sparki.print(dX);
     sparki.print("   dT: ");
@@ -134,7 +132,7 @@ void displayOdometry() {
     sparki.print(" a: ");
     sparki.println(to_degrees(b_err));
     sparki.print("h: ");
-    sparki.println(to_degrees(h_err));
+    sparki.print(to_degrees(h_err));
 }
 
 void loop() {
@@ -190,13 +188,13 @@ void loop() {
 
             sparki.motorRotate(
                 MOTOR_LEFT,
-                left_dir,
-                int(left_speed_pct * 100)
+                flip_left ? right_dir : left_dir,
+                abs(int(left_speed_pct * 100))
             );
             sparki.motorRotate(
                 MOTOR_RIGHT,
-                right_dir,
-                int(right_speed_pct * 100)
+                flip_right ? left_dir : right_dir,
+                abs(int(right_speed_pct * 100))
             );
 
             break;
