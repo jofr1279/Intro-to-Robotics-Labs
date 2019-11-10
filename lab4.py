@@ -1,13 +1,12 @@
 import json
-import pygame
-import time
-import rospy
 import numpy as np
-
+import time
 from enum import Enum
+
+import pygame
+import rospy
 from geometry_msgs.msg import Pose2D
 from std_msgs.msg import Float32MultiArray, Empty, Int16, String
-
 
 SCREEN_WIDTH = 420
 SCREEN_HEIGHT = 600
@@ -153,13 +152,13 @@ class Map(object):
         for row in range(MAP_SIZE_Y):
             for col in range(MAP_SIZE_X):
                 if self.map[row][col]:
-                    pygame.draw.rect(self.fake_screen, (255, 0, 0), (row * 10 + ZERO_OFFSET_X, col * 10 + ZERO_OFFSET_Y, 10, 10))
+                    pygame.draw.rect(self.fake_screen, (255, 0, 0), (row * 10 + ZERO_OFFSET_X, -(col * 10) + ZERO_OFFSET_Y, 10, 10))
 
         self.screen.blit(pygame.transform.scale(self.fake_screen, (SCREEN_WIDTH * SCALE, SCREEN_HEIGHT * SCALE)), (0, 0))
         pygame.display.update()
 
     def add_point(self):
-        self.sparki.us_distance = 10
+        # self.sparki.us_distance = 10
         print('X:', self.sparki.pose.x)
         print('Y:', self.sparki.pose.y)
         print('T:', self.sparki.pose.theta)
@@ -187,7 +186,25 @@ class Map(object):
         homo_matrix = np.matmul(rotation_matrix, robot_coords)
         print('Added:', homo_matrix)
         print('Plotting:', int(homo_matrix[1, 0]), int(homo_matrix[0, 0]))
-        self.map[-int(homo_matrix[1, 0])][int(homo_matrix[0, 0])] = True
+        self.map[int(homo_matrix[1, 0])][int(homo_matrix[0, 0])] = True
+
+    @staticmethod
+    def ij_to_cell_index(i, j):
+        return i + (j * MAP_SIZE_Y)
+
+    @staticmethod
+    def cell_index_to_ij(cell_index):
+        i = cell_index % MAP_SIZE_Y
+        j = cell_index // MAP_SIZE_Y
+        return i, j
+
+    def cost(self, cell_index_from, cell_index_to):
+        from_x, from_y = Map.cell_index_to_ij(cell_index_from)
+        to_x, to_y = Map.cell_index_to_ij(cell_index_to)
+        if abs(from_x - to_x) == 1 or abs(from_y - to_y) == 1:
+            if not (self.map[from_x][from_y] or self.map[to_x][to_y]):
+                return 1
+        return 99
 
 
 class Lab4(object):
@@ -199,7 +216,7 @@ class Lab4(object):
 
         self.sparki.reset_odometry()
         self.sparki.motor_speeds = 0, 0
-        self.sparki.servo_angle = 0
+        self.sparki.servo_angle = -45
 
     def _loop(self):
         self.sparki.request_ultrasonic()
@@ -214,7 +231,7 @@ class Lab4(object):
         else:
             self.sparki.motor_speeds = 1, 1
 
-        # if 0 < self.sparki.us_distance < 30:
+        if 0 < self.sparki.us_distance < 30:
             self.map.add_point()
 
         self.map.draw()
